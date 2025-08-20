@@ -22,7 +22,8 @@ A **Streamlit app** that generates quick AI-powered summaries of YouTube videos.
 ## 📸 Screenshot
 
 ![img.png](img.png)
-![img_1.png](img_1.png)
+![img_2.png](img_2.png)
+
 ---
 
 ## ⚡ Installation
@@ -88,9 +89,3 @@ You can deploy this app directly to **Streamlit Cloud**:
 ## 📄 License
 
 This project is licensed under the **MIT License**.
-
----
-
-Wenn du willst, kann ich jetzt noch eine **komplett fertige `requirements.txt`** vorschlagen, die direkt zu deinem Code passt, inklusive Streamlit, JSON-Handling, eventuell `genai`-Lib usw., damit man es direkt auf GitHub/Streamlit Cloud starten kann.
-
-Willst du, dass ich das mache?
