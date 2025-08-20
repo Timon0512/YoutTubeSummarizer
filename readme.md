@@ -1,7 +1,3 @@
-Perfekt! Hier ist eine **polierte GitHub-README-Version** für dein YouTube Summarizer-Projekt, mit Emojis, Badges und für Streamlit Cloud geeignet:
-
----
-
 # YouTube Video Summarizer 🎬🤖
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
