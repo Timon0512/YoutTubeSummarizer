@@ -21,8 +21,7 @@ A **Streamlit app** that generates quick AI-powered summaries of YouTube videos.
 
 ## 📸 Screenshot
 
-*(Hier kannst du einen Screenshot einfügen, z.B. vom Streamlit App Interface)*
-
+![img.png](img.png)
 ---
 
 ## ⚡ Installation
