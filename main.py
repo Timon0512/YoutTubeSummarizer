@@ -5,6 +5,7 @@ from google import genai
 import streamlit as st
 import re
 import json
+from urllib.parse import urlparse, parse_qs
 
 API_KEY = st.secrets["API_KEY"]
 json_path = "video_dict.json"
@@ -31,15 +32,31 @@ def key_exists(keys: list):
             return False
     return True
 
+# def get_video_id(url: str):
+#     """Extracts the YouTube video ID from a URL."""
+#     regex = r"^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*"
+#     match = re.match(regex, url)
+#     return match.group(2) if match and len(match.group(2)) == 11 else None
 
 def get_video_id(url: str):
-    """Extracts the YouTube video ID from a URL."""
-    regex = r"^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*"
-    match = re.match(regex, url)
-    return match.group(2) if match and len(match.group(2)) == 11 else None
+    """Extract YouTube video ID from multiple URL formats."""
+    parsed = urlparse(url)
+
+    # 1) youtu.be/<id>
+    if parsed.netloc in ("youtu.be", "www.youtu.be"):
+        return parsed.path[1:]
+
+    # 2) youtube.com/watch?v=<id>
+    if parsed.path == "/watch":
+        return parse_qs(parsed.query).get("v", [None])[0]
+
+    # 3) youtube.com/embed/<id>, youtube.com/v/<id>, youtube.com/live/<id>
+    if parsed.path.startswith(("/embed/", "/v/", "/live/","/shorts/")):
+        return parsed.path.split("/")[2]
+
+    return None
 
 def get_yt_transcript(video_id: str,
-                      #languages=None,
                       start_sec: int=0,
                       end_sec: float=float("inf")):
     str_list = []
@@ -68,8 +85,6 @@ def get_yt_transcript(video_id: str,
 
     full_transcript = " ".join(str_list)
     return full_transcript
-
-
 
 def summarize_transcript_stream(transcript: str, api_key: str, language: str = "DE"):
 
@@ -100,7 +115,6 @@ def summarize_transcript_stream(transcript: str, api_key: str, language: str = "
             yield chunk.text
 
     return ""
-
 
 def get_language(country_iso):
     my_dict = {
