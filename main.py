@@ -9,6 +9,35 @@ from urllib.parse import urlparse, parse_qs
 
 API_KEY = st.secrets["API_KEY"]
 json_path = "video_dict.json"
+
+DEFAULT_SUMMARY_PROMPT = """
+You are an expert at summarizing YouTube video transcripts.
+Your goal is to provide a clear and concise summary that captures the essence of the video.
+The summary must be written in {language}.
+Please format your response in Markdown.
+
+The summary should have the following structure:
+1. A short, catchy title for the summary. Use a heading level 2 (##).
+2. A one-paragraph overview of the video's main topic and conclusion.
+3. A bulleted list of the 3-5 most important key takeaways or points discussed. Use a heading level 3 (###) for "Key Takeaways".
+
+Here is the transcript:
+---
+{transcript}
+---
+""".strip()
+
+DEFAULT_STOCK_PROMPT = """
+You are a financial analyst. Identify all stocks or companies that are explicitly discussed in the transcript below.
+For each mentioned stock, determine whether the overall sentiment is Positive, Negative, or Neutral.
+Respond in {language} using Markdown with a table that has the columns: Unternehmen/Aktie, Sentiment, Begründung.
+If no stocks are discussed, explicitly state that no stocks were mentioned.
+
+Transcript:
+---
+{transcript}
+---
+""".strip()
 def load_video_dict(path):
     if os.path.exists(path):
         # Datei laden
@@ -86,25 +115,7 @@ def get_yt_transcript(video_id: str,
     full_transcript = " ".join(str_list)
     return full_transcript
 
-def summarize_transcript_stream(transcript: str, api_key: str, language: str = "DE"):
-
-    prompt = f"""
-        You are an expert at summarizing YouTube video transcripts.
-        Your goal is to provide a clear and concise summary that captures the essence of the video.
-        The summary must be written in {language}.
-        Please format your response in Markdown.
-
-        The summary should have the following structure:
-        1.  A short, catchy title for the summary. Use a heading level 2 (##).
-        2.  A one-paragraph overview of the video's main topic and conclusion.
-        3.  A bulleted list of the 3-5 most important key takeaways or points discussed. Use a heading level 3 (###) for "Key Takeaways".
-
-        Here is the transcript:
-        ---
-        {transcript}
-        ---
-        """
-
+def stream_model_response(prompt: str, api_key: str):
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content_stream(
         model='gemma-3n-e2b-it',
@@ -116,6 +127,16 @@ def summarize_transcript_stream(transcript: str, api_key: str, language: str = "
 
     return ""
 
+
+def summarize_transcript_stream(transcript: str, api_key: str, language: str, prompt_template: str):
+    prompt = prompt_template.format(language=language, transcript=transcript)
+    return stream_model_response(prompt, api_key)
+
+
+def stock_sentiment_stream(transcript: str, api_key: str, language: str, prompt_template: str):
+    prompt = prompt_template.format(language=language, transcript=transcript)
+    return stream_model_response(prompt, api_key)
+
 def get_language(country_iso):
     my_dict = {
         "DE": "German",
@@ -126,7 +147,7 @@ def get_language(country_iso):
     }
     return my_dict.get(country_iso)
 
-def save_stream_to_json(stream, path, language, video_id):
+def save_stream_to_json(stream, path, language, video_id, *, store=True, target_key="summary"):
     collected = []
     # Iteriere über den Stream
     for chunk in stream:
@@ -135,10 +156,13 @@ def save_stream_to_json(stream, path, language, video_id):
 
     # Am Ende zusammenfügen und speichern
     result = "".join(collected)
-    global video_dict
+    if not store:
+        return
 
-    if language not in video_dict[video_id]["summary"]:
-        video_dict[video_id]["summary"][language] = result
+    global video_dict
+    video_entry = video_dict.setdefault(video_id, {})
+    target_dict = video_entry.setdefault(target_key, {})
+    target_dict[language] = result
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(video_dict, f, indent=4, ensure_ascii=False)
@@ -153,6 +177,9 @@ def my_generator(text: str):
 st.title("Youtube Video Summarizer :clapper:")
 st.markdown("Paste a YouTube link to get a quick AI-powered summary.:notebook:")
 video_url = st.text_input(" ", value="Paste your YouTube URL here...")
+
+summary_prompt_template = DEFAULT_SUMMARY_PROMPT
+stock_prompt_template = DEFAULT_STOCK_PROMPT
 
 if video_url != "Paste your YouTube URL here...":
     video_id = get_video_id(video_url)
@@ -170,11 +197,26 @@ if video_url != "Paste your YouTube URL here...":
                                     default="English",
                                     )
 
+        with st.expander("LLM Prompt Einstellungen", expanded=False):
+            st.caption("Nutze die Platzhalter {language} und {transcript}, um Sprache und Inhalt zu steuern.")
+            summary_prompt_template = st.text_area(
+                "Prompt für die Zusammenfassung",
+                value=DEFAULT_SUMMARY_PROMPT,
+                height=260,
+                key="summary_prompt_input",
+            )
+            stock_prompt_template = st.text_area(
+                "Prompt für Aktien-Sentiment",
+                value=DEFAULT_STOCK_PROMPT,
+                height=220,
+                key="stock_prompt_input",
+            )
+
 else:
     st.stop()
 
 if st.button("Summarize"):
-    tab_summary, tab_transcript = st.tabs(["Ai powered Summary", "Transcript"])
+    tab_summary, tab_transcript, tab_stocks = st.tabs(["Ai powered Summary", "Transcript", "Besprochene Aktien"])
 
     if key_exists([video_id]):
         trans = video_dict.get(video_id)["transcript"]
@@ -183,7 +225,8 @@ if st.button("Summarize"):
         # st.write("get trans NOT from dict")
         trans = get_yt_transcript(video_id)
         video_dict[video_id] = {"transcript": trans,
-                                "summary": {}
+                                "summary": {},
+                                "stock_sentiment": {},
                                 }
 
         with open(json_path, "w", encoding="utf-8") as f:
@@ -192,8 +235,8 @@ if st.button("Summarize"):
 
     with tab_summary:
 
-        if key_exists([video_id, "summary", output_language]):
-            # st.write("key exists")
+        store_summary = summary_prompt_template.strip() == DEFAULT_SUMMARY_PROMPT
+        if store_summary and key_exists([video_id, "summary", output_language]):
             summary = video_dict.get(video_id)["summary"].get(output_language)
             st.write_stream(my_generator(summary))
 
@@ -204,16 +247,57 @@ if st.button("Summarize"):
             try:
                 st.write_stream(
                     save_stream_to_json(
-                        summarize_transcript_stream(trans, api_key=API_KEY, language=output_language),
+                        summarize_transcript_stream(
+                            trans,
+                            api_key=API_KEY,
+                            language=output_language,
+                            prompt_template=summary_prompt_template,
+                        ),
                         path=json_path,
                         language=output_language,
                         video_id=video_id,
+                        store=store_summary,
+                        target_key="summary",
                     )
                 )
 
 
+            except KeyError as e:
+                missing_key = e.args[0]
+                st.error(f"Der Prompt muss den Platzhalter {{{missing_key}}} enthalten.")
+                st.stop()
             except genai.errors.ClientError as e:
-                    st.error(e)
+                st.error(e)
 
     with tab_transcript:
         st.write(trans)
+
+    with tab_stocks:
+        store_stock = stock_prompt_template.strip() == DEFAULT_STOCK_PROMPT
+        if store_stock and key_exists([video_id, "stock_sentiment", output_language]):
+            stock_summary = video_dict.get(video_id)["stock_sentiment"].get(output_language)
+            st.write_stream(my_generator(stock_summary))
+
+        else:
+            try:
+                st.write_stream(
+                    save_stream_to_json(
+                        stock_sentiment_stream(
+                            trans,
+                            api_key=API_KEY,
+                            language=output_language,
+                            prompt_template=stock_prompt_template,
+                        ),
+                        path=json_path,
+                        language=output_language,
+                        video_id=video_id,
+                        store=store_stock,
+                        target_key="stock_sentiment",
+                    )
+                )
+            except KeyError as e:
+                missing_key = e.args[0]
+                st.error(f"Der Prompt muss den Platzhalter {{{missing_key}}} enthalten.")
+                st.stop()
+            except genai.errors.ClientError as e:
+                st.error(e)
