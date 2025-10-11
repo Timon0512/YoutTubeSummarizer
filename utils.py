@@ -2,9 +2,16 @@ from urllib.parse import urlparse, parse_qs
 import json
 import time
 import os
+import re
+from typing import Any, Dict, List
 from youtube_transcript_api import YouTubeTranscriptApi, _errors
 import streamlit as st
 from google import genai
+
+
+# Default location for storing cached video data. Allows overriding via environment
+# variable so that the module can also be reused from command line utilities.
+json_path = os.getenv("VIDEO_JSON_PATH", "video_dict.json")
 
 def get_language(country_iso):
     my_dict = {
@@ -50,6 +57,8 @@ def load_video_dict(path):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(video_dict, f, indent=4)
     return video_dict
+
+
 video_dict = load_video_dict(json_path)
 
 
@@ -141,3 +150,75 @@ def summarize_transcript_stream(transcript: str, api_key: str, language: str = "
             yield chunk.text
 
     return ""
+
+
+def build_stock_sentiment_prompt(transcript: str) -> str:
+    """Create a prompt for Gemini to extract discussed stocks with sentiments."""
+
+    return f"""
+You are a financial analyst who analyses transcripts of finance-related YouTube videos.
+Read the following transcript carefully and identify every individual stock, ETF or
+publicly traded company that is discussed.
+
+For each mentioned security return a JSON array where every element has the following keys:
+  - "ticker": The commonly used stock ticker if explicitly mentioned, otherwise infer it from context.
+  - "company": The full company or fund name.
+  - "sentiment": One of "buy", "sell" or "neutral" representing the speaker's stance.
+  - "evidence": A short quote or reasoning from the transcript that justifies the sentiment.
+
+Important rules:
+  * Only output valid JSON – do not include explanations or commentary.
+  * If no securities are discussed, return an empty JSON array ("[]").
+
+Transcript:
+---
+{transcript}
+---
+"""
+
+
+def _extract_json_payload(raw_text: str) -> Any:
+    """Best-effort conversion of a model response into JSON."""
+
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        end_idx = cleaned.rfind("```")
+        if end_idx != -1:
+            cleaned = cleaned[:end_idx]
+    cleaned = cleaned.strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Fallback: try to locate the first JSON-like structure.
+        match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
+        if match:
+            return json.loads(match.group(1))
+        raise
+
+
+def extract_stock_sentiments(transcript: str, api_key: str, model: str = "gemma-3n-e2b-it") -> List[Dict[str, Any]]:
+    """Return mentioned stocks with sentiment analysis using Gemini."""
+
+    prompt = build_stock_sentiment_prompt(transcript)
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+    )
+
+    if not response or not getattr(response, "text", None):
+        return []
+
+    try:
+        payload = _extract_json_payload(response.text)
+    except json.JSONDecodeError:
+        return []
+
+    if isinstance(payload, list):
+        return payload
+
+    return [payload]
