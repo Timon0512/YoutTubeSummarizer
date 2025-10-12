@@ -1,6 +1,10 @@
+import streamlit as st
 from utils import *
+from dotenv import load_dotenv
 
-API_KEY = st.secrets["API_KEY"]
+load_dotenv()
+
+API_KEY = os.getenv("API_KEY")
 json_path = "video_dict.json"
 
 st.title("Youtube Video Summarizer :clapper:")
@@ -34,10 +38,15 @@ if st.button("Summarize"):
         # st.write("get trans from dict")
     else:
         # st.write("get trans NOT from dict")
-        trans = get_yt_transcript(video_id)
-        video_dict[video_id] = {"transcript": trans,
-                                "summary": {}
-                                }
+        result = get_yt_transcript(video_id)
+        if result["success"]:
+            trans = result["data"]
+            video_dict[video_id] = {"transcript": trans,
+                                    "summary": {}
+                                    }
+        else:
+            st.error(result["error"])
+            st.stop()
 
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(video_dict, f, indent=4, ensure_ascii=False)

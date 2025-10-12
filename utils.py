@@ -5,8 +5,13 @@ import os
 import re
 from typing import Any, Dict, List
 from youtube_transcript_api import YouTubeTranscriptApi, _errors
-import streamlit as st
 from google import genai
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_KEY = os.getenv("API_KEY")
 
 
 # Default location for storing cached video data. Allows overriding via environment
@@ -98,14 +103,19 @@ def get_yt_transcript(video_id: str,
     ytt_api = YouTubeTranscriptApi()
     try:
         transcript_list = ytt_api.list(video_id)
-    except _errors.TranscriptsDisabled:
-        st.info("Transcript Disabled for this video. "
-                "Use Whisper....")
-        st.stop()
-    except _errors.IpBlocked:
-        st.info("Your IP has been blocked from YoutTube. "
-                "Not able to download the transcript.")
-        st.stop()
+    except (
+        _errors.TranscriptsDisabled,
+        _errors.NoTranscriptFound,
+        _errors.NotTranslatable,
+        _errors.VideoUnavailable,
+        _errors.CouldNotRetrieveTranscript,
+        _errors.YouTubeTranscriptApiException,
+    ) as e:
+        return {
+            "success": False,
+            "data": None,
+            "error": e
+        }
     language_list = []
     for transcript in transcript_list:
         language_list.append(transcript.language_code)
@@ -119,7 +129,11 @@ def get_yt_transcript(video_id: str,
             str_list.append(snippet.text)
 
     full_transcript = " ".join(str_list)
-    return full_transcript
+    return {
+            "success": True,
+            "data": full_transcript,
+            "error": None
+        }
 
 def summarize_transcript_stream(transcript: str, api_key: str, language: str = "DE"):
 
@@ -152,29 +166,45 @@ def summarize_transcript_stream(transcript: str, api_key: str, language: str = "
     return ""
 
 
-def build_stock_sentiment_prompt(transcript: str) -> str:
-    """Create a prompt for Gemini to extract discussed stocks with sentiments."""
+def return_stock_table(transcript: str, api_key: str, language: str = "DE"):
 
-    return f"""
-You are a financial analyst who analyses transcripts of finance-related YouTube videos.
-Read the following transcript carefully and identify every individual stock, ETF or
-publicly traded company that is discussed.
+    prompt = f"""
+        You are a senior equity research analyst specializing in interpreting earnings call transcripts and investor communications. 
+        Your goal is to evaluate the company's overall investment attractiveness based on qualitative statements in the text. 
+        Analyze the transcript carefully and assess the following five dimensions: 
+        
+        1. **Growth Outlook (-1 to +1)** — How optimistic or pessimistic is management about future revenue or market growth? 
+        2. **Profitability & Margins (-1 to +1)** — How confident is management regarding margins, cost efficiency, and profitability trends? 
+        3. **Market & Demand Conditions (-1 to +1)** — How positive or negative is management’s view of market demand, competition, and external conditions? 
+        4. **Guidance Confidence (0 to 1)** — How clear, specific, and credible is management’s guidance or forward-looking statements? 
+        5. **Tone / Management Sentiment (-1 to +1)** — The overall emotional tone of management (positive, neutral, or negative). 
+        
+        ### 🧮 Calculation Rules 
+        1. Compute the **base_score** as the mean of the first three dimensions: base_score = (growth_outlook + profitability + market_conditions) / 3 
+        2. Weight this base score by **guidance_confidence**, and then add the tone sentiment to capture communication style: weighted_score = (base_score * guidance_confidence + tone) / 2 
+        3. Convert the result into a **0–100 Investment Recommendation Score**: investment_recommendation_score = round( (weighted_score + 1) / 2 * 100 , 1 ) 
+        4. Based on the score, assign the **Recommendation** category: 
+            - 80–100 → **Buy** 
+            - 60–79 → **Hold / Accumulate** 
+            - 40–59 → **Neutral** 
+            - 20–39 → **Reduce / Sell** 
+            - 0–19 → **Strong Sell** 
+            
+        Return a json table with following columns: [Stock, base_score, weighted_score, investment_recommendation_score, Recommendation category] 
+        If no stocks are discussed, please return an empty json dict. 
+        Please do not response with any kind of unstructured text. 
+        ---
+        {transcript}
+        ---
+        """
 
-For each mentioned security return a JSON array where every element has the following keys:
-  - "ticker": The commonly used stock ticker if explicitly mentioned, otherwise infer it from context.
-  - "company": The full company or fund name.
-  - "sentiment": One of "buy", "sell" or "neutral" representing the speaker's stance.
-  - "evidence": A short quote or reasoning from the transcript that justifies the sentiment.
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model='gemma-3n-e2b-it',
+        contents=prompt,
+    )
 
-Important rules:
-  * Only output valid JSON – do not include explanations or commentary.
-  * If no securities are discussed, return an empty JSON array ("[]").
-
-Transcript:
----
-{transcript}
----
-"""
+    return response.text
 
 
 def _extract_json_payload(raw_text: str) -> Any:
@@ -200,25 +230,89 @@ def _extract_json_payload(raw_text: str) -> Any:
         raise
 
 
-def extract_stock_sentiments(transcript: str, api_key: str, model: str = "gemma-3n-e2b-it") -> List[Dict[str, Any]]:
-    """Return mentioned stocks with sentiment analysis using Gemini."""
+def save_to_video_dict(json_path):
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(video_dict, f, indent=4, ensure_ascii=False)
 
-    prompt = build_stock_sentiment_prompt(transcript)
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model=model,
-        contents=prompt,
+def load_video_dict(path: str) -> Dict[str, Dict[str, object]]:
+    """Load the persisted video information used to avoid duplicate processing."""
+
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as fh:
+            file = json.load(fh)
+
+            return file
+    return {}
+
+
+def get_transcript(json_path, id):
+    video_dict = load_video_dict(json_path)
+    return video_dict.get(id, {})["transcript"]
+
+import json
+import re
+
+def clean_and_parse_json(llm_output: str, save_path: str = None):
+    """
+    Bereinigt und parsed fehlerhafte JSON-Ausgaben von LLMs.
+
+    Args:
+        llm_output (str): Der rohe Output vom LLM (z. B. mit Zusatztext)
+        save_path (str, optional): Pfad, unter dem das JSON gespeichert werden soll
+
+    Returns:
+        data (dict | list): Geparstes JSON-Objekt
+    """
+    # 1️⃣ Versuch: Direktes Laden (vielleicht ist es ja schon gültig)
+    try:
+        data = json.loads(llm_output)
+        if save_path:
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+        return data
+    except json.JSONDecodeError:
+        pass  # Weiter unten wird bereinigt
+
+    # 2️⃣ Nur den JSON-ähnlichen Teil extrahieren (alles zwischen [ ... ] oder { ... })
+    match = re.search(r"(\[.*\]|\{.*\})", llm_output, re.DOTALL)
+    if not match:
+        raise ValueError("❌ Kein JSON-ähnlicher Block im Text gefunden.")
+
+    json_like = match.group(1)
+
+    # 3️⃣ Häufige Fehler automatisch korrigieren
+    json_like = (
+        json_like
+        .replace("'", '"')  # einfache Quotes in doppelte umwandeln
+        .replace("True", "true")
+        .replace("False", "false")
+        .replace("None", "null")
     )
 
-    if not response or not getattr(response, "text", None):
-        return []
+    # 4️⃣ Überzählige Kommas am Ende von Listen/Objekten entfernen
+    json_like = re.sub(r",(\s*[}\]])", r"\1", json_like)
 
+    # 5️⃣ Zweiter Versuch: Laden
     try:
-        payload = _extract_json_payload(response.text)
-    except json.JSONDecodeError:
-        return []
+        data = json.loads(json_like)
+    except json.JSONDecodeError as e:
+        print("⚠️ JSON Parsing Fehler:", e)
+        print("Versuch einer Reparatur...")
+        # Falls immer noch fehlerhaft → etwas aggressiver reparieren
+        json_like = re.sub(r"[\x00-\x1F\x7F]", "", json_like)  # unsichtbare Zeichen
+        data = json.loads(json_like)
 
-    if isinstance(payload, list):
-        return payload
+    # 6️⃣ Optional speichern
+    if save_path:
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
 
-    return [payload]
+    return data
+
+#
+# text = get_transcript(json_path,"f5_YEimKDXI")
+# table = return_stock_table(transcript=text, api_key=API_KEY)
+# print(table)
+# cleaned_table = clean_and_parse_json(table)
+# print(cleaned_table)
+
