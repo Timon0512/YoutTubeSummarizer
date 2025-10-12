@@ -5,8 +5,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
-# json_path = "video_dict.json"
 video_dict = load_video_dict(json_path)
+
+def key_exists(keys: list):
+    global video_dict
+    d = video_dict
+    for k in keys:
+        if isinstance(d, dict) and k in d:
+            d = d[k]
+        else:
+            return False
+    return True
 
 st.title("Youtube Video Summarizer :clapper:")
 st.markdown("Paste a YouTube link to get a quick AI-powered summary.:notebook:")
@@ -25,7 +34,7 @@ if video_url != "Paste your YouTube URL here...":
         output_language = st.pills("Select your desired output language",
                                     options=["English", "German", "Spanish", "French", "Portuguese", "Italian",
                                             "Chinese", "Japanese", "Arabic"],
-                                    default="English",
+                                    default="German",
                                     )
 
 else:

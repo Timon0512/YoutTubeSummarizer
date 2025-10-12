@@ -6,16 +6,10 @@ import re
 from typing import Any, Dict, List
 from youtube_transcript_api import YouTubeTranscriptApi, _errors
 from google import genai
-
 from dotenv import load_dotenv
 
 load_dotenv()
-
 API_KEY = os.getenv("API_KEY")
-
-
-# Default location for storing cached video data. Allows overriding via environment
-# variable so that the module can also be reused from command line utilities.
 json_path = os.getenv("VIDEO_JSON_PATH", "video_dict.json")
 
 def get_language(country_iso):
@@ -62,21 +56,6 @@ def load_video_dict(path):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(video_dict, f, indent=4)
     return video_dict
-
-
-# video_dict = load_video_dict(json_path)
-
-
-def key_exists(keys: list):
-    global video_dict
-    d = video_dict
-    for k in keys:
-        if isinstance(d, dict) and k in d:
-            d = d[k]
-        else:
-            return False
-    return True
-
 
 def get_video_id(url: str):
     """Extract YouTube video ID from multiple URL formats."""
