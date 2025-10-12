@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
-json_path = "video_dict.json"
+# json_path = "video_dict.json"
 video_dict = load_video_dict(json_path)
 
 st.title("Youtube Video Summarizer :clapper:")

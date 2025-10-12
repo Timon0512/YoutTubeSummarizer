@@ -60,7 +60,6 @@ def main():
 
     channels = [channel["id"] for channel in CHANNELS]
     video_dict = load_video_dict(json_path)
-    print(video_dict)
     for channel in channels:
         latest_videos = fetch_latest_videos(channel, 1)
         ids = [video["id"] for video in latest_videos]
@@ -79,7 +78,6 @@ def main():
                                             }
                     table = return_stock_table(transcript=result["data"], api_key=API_KEY)
                     cleaned_table = clean_and_parse_json(table)
-                    print(cleaned_table)
                     video_dict[video_id]["table"] = cleaned_table
                     save_to_video_dict(json_path, video_dict)
                 else:
