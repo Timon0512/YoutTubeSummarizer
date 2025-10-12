@@ -64,7 +64,7 @@ def load_video_dict(path):
     return video_dict
 
 
-video_dict = load_video_dict(json_path)
+# video_dict = load_video_dict(json_path)
 
 
 def key_exists(keys: list):
@@ -230,7 +230,7 @@ def _extract_json_payload(raw_text: str) -> Any:
         raise
 
 
-def save_to_video_dict(json_path):
+def save_to_video_dict(json_path, video_dict):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(video_dict, f, indent=4, ensure_ascii=False)
 
@@ -248,9 +248,6 @@ def load_video_dict(path: str) -> Dict[str, Dict[str, object]]:
 def get_transcript(json_path, id):
     video_dict = load_video_dict(json_path)
     return video_dict.get(id, {})["transcript"]
-
-import json
-import re
 
 def clean_and_parse_json(llm_output: str, save_path: str = None):
     """
