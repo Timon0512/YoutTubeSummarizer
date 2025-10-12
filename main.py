@@ -58,8 +58,8 @@ if st.button("Summarize"):
             st.error(result["error"])
             st.stop()
 
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(video_dict, f, indent=4, ensure_ascii=False)
+        save_video_dict_safe(video_dict, json_path)
+        video_dict = load_video_dict(json_path)
 
 
     with tab_summary:
@@ -80,6 +80,7 @@ if st.button("Summarize"):
                         path=json_path,
                         language=output_language,
                         video_id=video_id,
+                        video_dict=video_dict
                     )
                 )
 

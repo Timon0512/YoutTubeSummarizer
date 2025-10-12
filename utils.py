@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from youtube_transcript_api import YouTubeTranscriptApi, _errors
 from google import genai
 from dotenv import load_dotenv
+import shutil, datetime
 
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
@@ -22,7 +23,7 @@ def get_language(country_iso):
     }
     return my_dict.get(country_iso)
 
-def save_stream_to_json(stream, path, language, video_id):
+def save_stream_to_json(stream, path, language, video_id, video_dict):
     collected = []
     # Iteriere über den Stream
     for chunk in stream:
@@ -31,7 +32,6 @@ def save_stream_to_json(stream, path, language, video_id):
 
     # Am Ende zusammenfügen und speichern
     result = "".join(collected)
-    global video_dict
 
     if language not in video_dict[video_id]["summary"]:
         video_dict[video_id]["summary"][language] = result
@@ -212,6 +212,19 @@ def _extract_json_payload(raw_text: str) -> Any:
 def save_to_video_dict(json_path, video_dict):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(video_dict, f, indent=4, ensure_ascii=False)
+
+
+def save_video_dict_safe(video_dict, json_path):
+    """Speichert das video_dict sicher als JSON und erstellt Backup bei Fehler."""
+    try:
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(video_dict, f, indent=4, ensure_ascii=False, default=str)
+    except Exception as e:
+        print(f"❌ Fehler beim Speichern von {json_path}: {e}")
+        # Backup erstellen
+        backup = f"{json_path}.{datetime.datetime.now():%Y%m%d_%H%M%S}.bak"
+        shutil.copy(json_path, backup)
+        raise e
 
 def load_video_dict(path: str) -> Dict[str, Dict[str, object]]:
     """Load the persisted video information used to avoid duplicate processing."""
