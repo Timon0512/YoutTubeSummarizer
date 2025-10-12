@@ -23,7 +23,7 @@ from utils import extract_stock_sentiments, json_path
 
 # Channels to watch. Extend this list with additional IDs as needed.
 CHANNELS: List[Dict[str, str]] = [
-    # {"id": "UC_x5XG1OV2P6uZZ5FSM9Ttw", "name": "Google Developers"},
+    {"id": "UCzD0b1nXk1Zz4fZKZhSNyRw", "name": "Markus Koch"},
 ]
 
 # Reuse the same JSON file as the Streamlit app so that processed videos only
