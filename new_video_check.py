@@ -1,64 +1,90 @@
-import requests
+"""Monitor a list of YouTube channels and analyse new uploads with Gemini.
+
+The previous command line interface has been replaced with a simpler module level
+configuration. Channels are specified via :data:`CHANNELS` and the module keeps
+track of processed videos by reading and updating ``video_dict.json`` – the same
+store that is used by the Streamlit front end. Whenever a new upload is detected
+its transcript is analysed with Gemini through :func:`utils.extract_stock_sentiments`.
+"""
+
+from __future__ import annotations
+
+import sys
+from typing import Dict, List, MutableMapping, Optional, Sequence, Tuple
 import xml.etree.ElementTree as ET
-import json
 import os
-from datetime import datetime
+import requests
+from utils import get_yt_transcript, save_to_video_dict, json_path, load_video_dict, return_stock_table, clean_and_parse_json
+from dotenv import load_dotenv
 
-# === KONFIGURATION ===
-CHANNEL_ID = "UCyCBf6asf89aQJaSXuAuTsg"  # <-- YouTube Channel ID hier eintragen
-LAST_CHECK_FILE = "last_videos.json"
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
 
+# Channels to watch. Extend this list with additional IDs as needed.
+CHANNELS: List[Dict[str, str]] = [
+    {"id": "UCyCBf6asf89aQJaSXuAuTsg", "name": "Markus Koch"},
+   # {"id": "UCzD0b1nXk1Zz4fZKZhSNyRw2", "name": "Marku2s Koch"},
+]
 
-def get_latest_videos(channel_id, limit=5):
-    """Hole die letzten Videos eines YouTube-Kanals über RSS"""
+def fetch_latest_videos(channel_id: str, limit: int = 5) -> List[Dict[str, str]]:
+    """Fetch metadata for the latest ``limit`` videos of a channel.
+
+    The function relies on the public YouTube RSS endpoint and therefore does not
+    require an API key.
+    """
+
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-    resp = requests.get(url)
-    resp.raise_for_status()
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
 
-    root = ET.fromstring(resp.text)
+    root = ET.fromstring(response.text)
     ns = {"yt": "http://www.youtube.com/xml/schemas/2015", "atom": "http://www.w3.org/2005/Atom"}
 
-    videos = []
-    for entry in root.findall("atom:entry", ns):
-        video_id = entry.find("yt:videoId", ns).text
-        title = entry.find("atom:title", ns).text
-        published = entry.find("atom:published", ns).text
-        videos.append({
-            "id": video_id,
-            "title": title,
-            "published": published,
-            "url": f"https://www.youtube.com/watch?v={video_id}"
-        })
-    return videos[:limit]
+    videos: List[Dict[str, str]] = []
+    for entry in root.findall("atom:entry", ns)[:limit]:
+        video_id = entry.find("yt:videoId", ns).text  # type: ignore[union-attr]
+        title = entry.find("atom:title", ns).text or ""
+        published = entry.find("atom:published", ns).text or ""
+        videos.append(
+            {
+                "id": video_id,
+                "title": title,
+                "published": published,
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+            }
+        )
 
+    return videos
 
-def load_last_known_videos():
-    if not os.path.exists(LAST_CHECK_FILE):
-        return []
-    with open(LAST_CHECK_FILE, "r") as f:
-        return json.load(f)
+def main():
 
+    channels = [channel["id"] for channel in CHANNELS]
+    video_dict = load_video_dict(json_path)
+    for channel in channels:
+        latest_videos = fetch_latest_videos(channel, 1)
+        ids = [video["id"] for video in latest_videos]
 
-def save_last_known_videos(videos):
-    with open(LAST_CHECK_FILE, "w") as f:
-        json.dump([v["id"] for v in videos], f)
+        for video_id in ids:
+            if video_id in video_dict.keys():
+                print(f"{id} is in keys")
+            else:
+                print(f"{video_id} is not in keys")
+                result = get_yt_transcript(video_id)
+                if result["success"]:
+                    #save transcript to json
+                    video_dict[video_id] = {"transcript": result["data"],
+                                            "summary": {},
+                                            "table": [],
+                                            }
+                    table = return_stock_table(transcript=result["data"], api_key=API_KEY)
+                    cleaned_table = clean_and_parse_json(table)
+                    video_dict[video_id]["table"] = cleaned_table
+                    save_to_video_dict(json_path, video_dict)
+                else:
+                    #add logging later on
+                    continue
 
-
-def check_for_new_videos():
-    latest = get_latest_videos(CHANNEL_ID)
-    old_ids = set(load_last_known_videos())
-    new_videos = [v for v in latest if v["id"] not in old_ids]
-
-    if new_videos:
-        print(f"\n📺 Neue Videos gefunden ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}):")
-        for v in new_videos:
-            print(f" - {v['title']}: {v['url']}")
-        save_last_known_videos(latest)
-    else:
-        print(f"{datetime.now().strftime('%H:%M:%S')} – Keine neuen Videos.")
-
+                continue
 
 if __name__ == "__main__":
-    #check_for_new_videos()
-    latest = get_latest_videos(CHANNEL_ID)
-    print(len(latest))
+    main()

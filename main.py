@@ -1,7 +1,21 @@
+import streamlit as st
 from utils import *
+from dotenv import load_dotenv
 
-API_KEY = st.secrets["API_KEY"]
-json_path = "video_dict.json"
+load_dotenv()
+
+API_KEY = os.getenv("API_KEY")
+video_dict = load_video_dict(json_path)
+
+def key_exists(keys: list):
+    global video_dict
+    d = video_dict
+    for k in keys:
+        if isinstance(d, dict) and k in d:
+            d = d[k]
+        else:
+            return False
+    return True
 
 st.title("Youtube Video Summarizer :clapper:")
 st.markdown("Paste a YouTube link to get a quick AI-powered summary.:notebook:")
@@ -20,7 +34,7 @@ if video_url != "Paste your YouTube URL here...":
         output_language = st.pills("Select your desired output language",
                                     options=["English", "German", "Spanish", "French", "Portuguese", "Italian",
                                             "Chinese", "Japanese", "Arabic"],
-                                    default="English",
+                                    default="German",
                                     )
 
 else:
@@ -34,13 +48,18 @@ if st.button("Summarize"):
         # st.write("get trans from dict")
     else:
         # st.write("get trans NOT from dict")
-        trans = get_yt_transcript(video_id)
-        video_dict[video_id] = {"transcript": trans,
-                                "summary": {}
-                                }
+        result = get_yt_transcript(video_id)
+        if result["success"]:
+            trans = result["data"]
+            video_dict[video_id] = {"transcript": trans,
+                                    "summary": {}
+                                    }
+        else:
+            st.error(result["error"])
+            st.stop()
 
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(video_dict, f, indent=4, ensure_ascii=False)
+        save_video_dict_safe(video_dict, json_path)
+        video_dict = load_video_dict(json_path)
 
 
     with tab_summary:
@@ -61,6 +80,7 @@ if st.button("Summarize"):
                         path=json_path,
                         language=output_language,
                         video_id=video_id,
+                        video_dict=video_dict
                     )
                 )
 
