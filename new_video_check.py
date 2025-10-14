@@ -57,7 +57,7 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> List[Dict[str, str]]
 
     return videos
 
-def create_df_table_from_rating():
+def create_df_table_from_rating(json_data):
     """
 
         ### 🧮 Calculation Rules
@@ -72,7 +72,7 @@ def create_df_table_from_rating():
             - 0–19 → **Strong Sell**
 
     """
-    data = load_json_file(rating_path)
+    data = json_data
     rows = []
     for video_id, entries in data.items():
         for entry in entries:
@@ -125,8 +125,8 @@ def main():
                 print(cleaned_rating)
                 rating_dict[video_id] = cleaned_rating
                 save_to_json(rating_dict, rating_path)
+                create_df_table_from_rating(rating_dict)
 
 
 if __name__ == "__main__":
-    # main()
-    create_df_table_from_rating()
+    main()
