@@ -11,7 +11,10 @@ import shutil, datetime
 
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
-json_path = os.getenv("VIDEO_JSON_PATH", "video_dict.json")
+transcipt_path = os.getenv("TRANSCRIT_JSON_PATH", "transcripts.json")
+summary_path = os.getenv("SUMMARY_JSON_PATH", "summary.json")
+rating_path = os.getenv("RATING_JSON_PATH", "rating.json")
+
 
 def get_language(country_iso):
     my_dict = {
@@ -23,7 +26,7 @@ def get_language(country_iso):
     }
     return my_dict.get(country_iso)
 
-def save_stream_to_json(stream, path, language, video_id, video_dict):
+def save_stream_to_json(stream, path, language, video_id, dictionary):
     collected = []
     # Iteriere über den Stream
     for chunk in stream:
@@ -33,11 +36,13 @@ def save_stream_to_json(stream, path, language, video_id, video_dict):
     # Am Ende zusammenfügen und speichern
     result = "".join(collected)
 
-    if language not in video_dict[video_id]["summary"]:
-        video_dict[video_id]["summary"][language] = result
+    if video_id not in dictionary:
+        dictionary[video_id] = {}
+
+    dictionary[video_id][language] = result
 
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(video_dict, f, indent=4, ensure_ascii=False)
+        json.dump(dictionary, f, indent=4, ensure_ascii=False)
 
 def my_generator(text: str):
     str_list = text.split(" ")
@@ -45,7 +50,7 @@ def my_generator(text: str):
         yield word + " "
         time.sleep(0.02)
 
-def load_video_dict(path):
+def load_json_file(path):
     if os.path.exists(path):
         # Datei laden
         with open(path, "r", encoding="utf-8") as f:
@@ -157,19 +162,8 @@ def return_stock_table(transcript: str, api_key: str, language: str = "DE"):
         3. **Market & Demand Conditions (-1 to +1)** — How positive or negative is management’s view of market demand, competition, and external conditions? 
         4. **Guidance Confidence (0 to 1)** — How clear, specific, and credible is management’s guidance or forward-looking statements? 
         5. **Tone / Management Sentiment (-1 to +1)** — The overall emotional tone of management (positive, neutral, or negative). 
-        
-        ### 🧮 Calculation Rules 
-        1. Compute the **base_score** as the mean of the first three dimensions: base_score = (growth_outlook + profitability + market_conditions) / 3 
-        2. Weight this base score by **guidance_confidence**, and then add the tone sentiment to capture communication style: weighted_score = (base_score * guidance_confidence + tone) / 2 
-        3. Convert the result into a **0–100 Investment Recommendation Score**: investment_recommendation_score = round( (weighted_score + 1) / 2 * 100 , 1 ) 
-        4. Based on the score, assign the **Recommendation** category: 
-            - 80–100 → **Buy** 
-            - 60–79 → **Hold / Accumulate** 
-            - 40–59 → **Neutral** 
-            - 20–39 → **Reduce / Sell** 
-            - 0–19 → **Strong Sell** 
             
-        Return a json table with following columns: [Stock, base_score, weighted_score, investment_recommendation_score, Recommendation category] 
+        Return a json table with following columns: [Stock Name, Stock Ticker, Stock ISIN, Growth Outlook, Profitability & Margins, Market & Demand Conditions, Guidance Confidence, Tone / Management Sentiment] 
         If no stocks are discussed, please return an empty json dict. 
         Please do not response with any kind of unstructured text. 
         ---
@@ -214,7 +208,7 @@ def save_to_video_dict(json_path, video_dict):
         json.dump(video_dict, f, indent=4, ensure_ascii=False)
 
 
-def save_video_dict_safe(video_dict, json_path):
+def save_dict_to_json(video_dict, json_path):
     """Speichert das video_dict sicher als JSON und erstellt Backup bei Fehler."""
     try:
         with open(json_path, "w", encoding="utf-8") as f:
@@ -226,15 +220,15 @@ def save_video_dict_safe(video_dict, json_path):
         shutil.copy(json_path, backup)
         raise e
 
-def load_video_dict(path: str) -> Dict[str, Dict[str, object]]:
-    """Load the persisted video information used to avoid duplicate processing."""
-
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as fh:
-            file = json.load(fh)
-
-            return file
-    return {}
+# def load_video_dict(path: str) -> Dict[str, Dict[str, object]]:
+#     """Load the persisted video information used to avoid duplicate processing."""
+#
+#     if os.path.exists(path):
+#         with open(path, "r", encoding="utf-8") as fh:
+#             file = json.load(fh)
+#
+#             return file
+#     return {}
 
 
 def get_transcript(json_path, id):
@@ -297,6 +291,22 @@ def clean_and_parse_json(llm_output: str, save_path: str = None):
             json.dump(data, f, indent=4, ensure_ascii=False)
 
     return data
+
+def create_df():
+    """
+
+        ### 🧮 Calculation Rules
+        1. Compute the **base_score** as the mean of the first three dimensions: base_score = (growth_outlook + profitability + market_conditions) / 3
+        2. Weight this base score by **guidance_confidence**, and then add the tone sentiment to capture communication style: weighted_score = (base_score * guidance_confidence + tone) / 2
+        3. Convert the result into a **0–100 Investment Recommendation Score**: investment_recommendation_score = round( (weighted_score + 1) / 2 * 100 , 1 )
+        4. Based on the score, assign the **Recommendation** category:
+            - 80–100 → **Buy**
+            - 60–79 → **Hold / Accumulate**
+            - 40–59 → **Neutral**
+            - 20–39 → **Reduce / Sell**
+            - 0–19 → **Strong Sell**
+
+    """
 
 #
 # text = get_transcript(json_path,"f5_YEimKDXI")

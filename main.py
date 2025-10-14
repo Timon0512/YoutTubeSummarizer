@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
-video_dict = load_video_dict(json_path)
+transcript_dict = load_json_file(transcipt_path)
+summary_dict = load_json_file(summary_path)
 
-def key_exists(keys: list):
-    global video_dict
-    d = video_dict
+def key_exists(keys: list, dictionary: dict):
+    d = dictionary
     for k in keys:
         if isinstance(d, dict) and k in d:
             d = d[k]
@@ -39,54 +39,43 @@ if video_url != "Paste your YouTube URL here...":
 
 else:
     st.stop()
-
-if st.button("Summarize"):
-    tab_summary, tab_transcript = st.tabs(["Ai powered Summary", "Transcript"])
-
-    if key_exists([video_id]):
-        trans = video_dict.get(video_id)["transcript"]
-        # st.write("get trans from dict")
+with st.spinner("Loading Transcript"):
+    if key_exists([video_id], dictionary=transcript_dict):
+        transcript = transcript_dict.get(video_id)
     else:
-        # st.write("get trans NOT from dict")
         result = get_yt_transcript(video_id)
         if result["success"]:
-            trans = result["data"]
-            video_dict[video_id] = {"transcript": trans,
-                                    "summary": {}
-                                    }
+            transcript = result["data"]
+            transcript_dict[video_id] = transcript
         else:
             st.error(result["error"])
             st.stop()
 
-        save_video_dict_safe(video_dict, json_path)
-        video_dict = load_video_dict(json_path)
+        save_dict_to_json(transcript_dict, transcipt_path)
 
+if st.button("Summarize"):
+    tab_summary, tab_transcript = st.tabs(["Ai powered Summary", "Transcript"])
 
     with tab_summary:
 
-        if key_exists([video_id, "summary", output_language]):
-            # st.write("key exists")
-            summary = video_dict.get(video_id)["summary"].get(output_language)
+        if key_exists([video_id, output_language], summary_dict):
+            summary = summary_dict[video_id][output_language]
             st.write_stream(my_generator(summary))
-
-
         else:
-            # st.write("key does NOT exists")
 
             try:
                 st.write_stream(
                     save_stream_to_json(
-                        summarize_transcript_stream(trans, api_key=API_KEY, language=output_language),
-                        path=json_path,
+                        summarize_transcript_stream(transcript, api_key=API_KEY, language=output_language),
+                        path=summary_path,
                         language=output_language,
                         video_id=video_id,
-                        video_dict=video_dict
+                        dictionary=summary_dict
                     )
                 )
-
 
             except genai.errors.ClientError as e:
                     st.error(e)
 
     with tab_transcript:
-        st.write(trans)
+        st.write(transcript)

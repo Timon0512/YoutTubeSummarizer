@@ -14,7 +14,7 @@ from typing import Dict, List, MutableMapping, Optional, Sequence, Tuple
 import xml.etree.ElementTree as ET
 import os
 import requests
-from utils import get_yt_transcript, save_to_video_dict, json_path, load_video_dict, return_stock_table, clean_and_parse_json
+from utils import get_yt_transcript, save_to_video_dict, json_table_path, load_video_dict, return_stock_table, clean_and_parse_json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -59,27 +59,26 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> List[Dict[str, str]]
 def main():
 
     channels = [channel["id"] for channel in CHANNELS]
-    video_dict = load_video_dict(json_path)
+    video_dict = load_video_dict(json_table_path)
     for channel in channels:
         latest_videos = fetch_latest_videos(channel, 1)
         ids = [video["id"] for video in latest_videos]
 
         for video_id in ids:
             if video_id in video_dict.keys():
-                print(f"{id} is in keys")
+                print(f"{video_id} is in keys")
             else:
                 print(f"{video_id} is not in keys")
                 result = get_yt_transcript(video_id)
                 if result["success"]:
                     #save transcript to json
                     video_dict[video_id] = {"transcript": result["data"],
-                                            "summary": {},
                                             "table": [],
                                             }
                     table = return_stock_table(transcript=result["data"], api_key=API_KEY)
                     cleaned_table = clean_and_parse_json(table)
                     video_dict[video_id]["table"] = cleaned_table
-                    save_to_video_dict(json_path, video_dict)
+                    save_to_video_dict(json_table_path, video_dict)
                 else:
                     #add logging later on
                     continue
