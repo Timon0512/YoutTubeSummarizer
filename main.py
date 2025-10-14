@@ -1,21 +1,15 @@
 import streamlit as st
-from utils import *
+from utils import load_json_file, get_video_id, transcipt_path, key_exists, save_to_json, get_yt_transcript, my_generator, save_stream_to_json, summarize_transcript_stream
 from dotenv import load_dotenv
+import os
+from google import genai
 
 load_dotenv()
+summary_path = os.getenv("SUMMARY_JSON_PATH", "summary.json")
 
 API_KEY = os.getenv("API_KEY")
 transcript_dict = load_json_file(transcipt_path)
 summary_dict = load_json_file(summary_path)
-
-def key_exists(keys: list, dictionary: dict):
-    d = dictionary
-    for k in keys:
-        if isinstance(d, dict) and k in d:
-            d = d[k]
-        else:
-            return False
-    return True
 
 st.title("Youtube Video Summarizer :clapper:")
 st.markdown("Paste a YouTube link to get a quick AI-powered summary.:notebook:")
@@ -51,7 +45,7 @@ with st.spinner("Loading Transcript"):
             st.error(result["error"])
             st.stop()
 
-        save_dict_to_json(transcript_dict, transcipt_path)
+        save_to_json(transcript_dict, transcipt_path)
 
 if st.button("Summarize"):
     tab_summary, tab_transcript = st.tabs(["Ai powered Summary", "Transcript"])

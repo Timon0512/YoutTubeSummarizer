@@ -12,19 +12,28 @@ import shutil, datetime
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 transcipt_path = os.getenv("TRANSCRIT_JSON_PATH", "transcripts.json")
-summary_path = os.getenv("SUMMARY_JSON_PATH", "summary.json")
-rating_path = os.getenv("RATING_JSON_PATH", "rating.json")
 
 
-def get_language(country_iso):
-    my_dict = {
-        "DE": "German",
-        "EN": "English",
-        "ES": "Spanish",
-        "IT": "Italian",
-        "CN": "Chinese",
-    }
-    return my_dict.get(country_iso)
+
+
+def key_exists(keys: list, dictionary: dict):
+    d = dictionary
+    for k in keys:
+        if isinstance(d, dict) and k in d:
+            d = d[k]
+        else:
+            return False
+    return True
+
+# def get_language(country_iso):
+#     my_dict = {
+#         "DE": "German",
+#         "EN": "English",
+#         "ES": "Spanish",
+#         "IT": "Italian",
+#         "CN": "Chinese",
+#     }
+#     return my_dict.get(country_iso)
 
 def save_stream_to_json(stream, path, language, video_id, dictionary):
     collected = []
@@ -150,7 +159,7 @@ def summarize_transcript_stream(transcript: str, api_key: str, language: str = "
     return ""
 
 
-def return_stock_table(transcript: str, api_key: str, language: str = "DE"):
+def get_llm_stock_rating(transcript: str, api_key: str, language: str = "DE"):
 
     prompt = f"""
         You are a senior equity research analyst specializing in interpreting earnings call transcripts and investor communications. 
@@ -203,12 +212,12 @@ def _extract_json_payload(raw_text: str) -> Any:
         raise
 
 
-def save_to_video_dict(json_path, video_dict):
+def save_to_json(json_path, video_dict):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(video_dict, f, indent=4, ensure_ascii=False)
 
 
-def save_dict_to_json(video_dict, json_path):
+def save_to_json(video_dict, json_path):
     """Speichert das video_dict sicher als JSON und erstellt Backup bei Fehler."""
     try:
         with open(json_path, "w", encoding="utf-8") as f:
@@ -220,20 +229,10 @@ def save_dict_to_json(video_dict, json_path):
         shutil.copy(json_path, backup)
         raise e
 
-# def load_video_dict(path: str) -> Dict[str, Dict[str, object]]:
-#     """Load the persisted video information used to avoid duplicate processing."""
-#
-#     if os.path.exists(path):
-#         with open(path, "r", encoding="utf-8") as fh:
-#             file = json.load(fh)
-#
-#             return file
-#     return {}
 
-
-def get_transcript(json_path, id):
-    video_dict = load_video_dict(json_path)
-    return video_dict.get(id, {})["transcript"]
+# def get_transcript(json_path, id):
+#     video_dict = load_video_dict(json_path)
+#     return video_dict.get(id, {})["transcript"]
 
 def clean_and_parse_json(llm_output: str, save_path: str = None):
     """

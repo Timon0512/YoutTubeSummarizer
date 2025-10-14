@@ -8,17 +8,17 @@ its transcript is analysed with Gemini through :func:`utils.extract_stock_sentim
 """
 
 from __future__ import annotations
-
-import sys
-from typing import Dict, List, MutableMapping, Optional, Sequence, Tuple
+from typing import Dict, List
 import xml.etree.ElementTree as ET
 import os
+import pandas as pd
 import requests
-from utils import get_yt_transcript, save_to_video_dict, json_table_path, load_video_dict, return_stock_table, clean_and_parse_json
+from utils import get_yt_transcript, save_to_json, transcipt_path, get_llm_stock_rating, clean_and_parse_json, load_json_file
 from dotenv import load_dotenv
 
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
+rating_path = os.getenv("RATING_JSON_PATH", "rating.json")
 
 # Channels to watch. Extend this list with additional IDs as needed.
 CHANNELS: List[Dict[str, str]] = [
@@ -56,34 +56,59 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> List[Dict[str, str]]
 
     return videos
 
+def create_df_table_from_rating():
+    data = load_json_file(rating_path)
+    rows = []
+    for video_id, entries in data.items():
+        for entry in entries:
+            entry["video_id"] = video_id  # Video-ID als eigene Spalte
+            rows.append(entry)
+
+    df = pd.json_normalize(rows)
+    print(df)
+
+
 def main():
 
     channels = [channel["id"] for channel in CHANNELS]
-    video_dict = load_video_dict(json_table_path)
+    transcript_dict = load_json_file(transcipt_path)
+    rating_dict = load_json_file(rating_path)
+
     for channel in channels:
-        latest_videos = fetch_latest_videos(channel, 1)
-        ids = [video["id"] for video in latest_videos]
+        latest_videos = fetch_latest_videos(channel, 2)
+        ids = [video["id"] for video in latest_videos] # 'published': '2025-10-13T20:58:48+00:00'
 
         for video_id in ids:
-            if video_id in video_dict.keys():
-                print(f"{video_id} is in keys")
+            if video_id in transcript_dict.keys():
+                transcript = transcript_dict.get(video_id, None)
+                print(f"for video íd: {video_id} exists a transcript")
+
             else:
-                print(f"{video_id} is not in keys")
+                print(f"downloading transcript for video íd: {video_id}")
                 result = get_yt_transcript(video_id)
                 if result["success"]:
-                    #save transcript to json
-                    video_dict[video_id] = {"transcript": result["data"],
-                                            "table": [],
-                                            }
-                    table = return_stock_table(transcript=result["data"], api_key=API_KEY)
-                    cleaned_table = clean_and_parse_json(table)
-                    video_dict[video_id]["table"] = cleaned_table
-                    save_to_video_dict(json_table_path, video_dict)
+                    transcript = result["data"]
+                    transcript_dict[video_id] = transcript
+                    save_to_json(transcript_dict, transcipt_path)
                 else:
-                    #add logging later on
+                    print(f"Transcript could not be downloaded for video id: {video_id}")
+                    #Add Loggger later on
                     continue
 
+            if video_id in rating_dict.keys():
+                print(f"Rating for video id: {video_id} already exists")
                 continue
+            else:
+                rating = get_llm_stock_rating(transcript=transcript, api_key=API_KEY)
+                print(f"Rating is:")
+                print(rating)
+                cleaned_rating = clean_and_parse_json(rating)
+                print(f"cleaned rating is:")
+                print(cleaned_rating)
+                rating_dict[video_id] = cleaned_rating
+                save_to_json(rating_dict, rating_path)
+
 
 if __name__ == "__main__":
-    main()
+    # main()
+    create_df_table_from_rating()
