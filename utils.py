@@ -6,12 +6,7 @@ import re
 from typing import Any, Dict, List
 from youtube_transcript_api import YouTubeTranscriptApi, _errors
 from google import genai
-from dotenv import load_dotenv
 import shutil, datetime
-
-load_dotenv()
-API_KEY = os.getenv("API_KEY")
-transcipt_path = os.getenv("TRANSCRIT_JSON_PATH", "transcripts.json")
 
 
 
@@ -24,16 +19,6 @@ def key_exists(keys: list, dictionary: dict):
         else:
             return False
     return True
-
-# def get_language(country_iso):
-#     my_dict = {
-#         "DE": "German",
-#         "EN": "English",
-#         "ES": "Spanish",
-#         "IT": "Italian",
-#         "CN": "Chinese",
-#     }
-#     return my_dict.get(country_iso)
 
 def save_stream_to_json(stream, path, language, video_id, dictionary):
     collected = []
@@ -167,12 +152,12 @@ def get_llm_stock_rating(transcript: str, api_key: str, language: str = "DE"):
         Analyze the transcript carefully and assess the following five dimensions: 
         
         1. **Growth Outlook (-1 to +1)** — How optimistic or pessimistic is management about future revenue or market growth? 
-        2. **Profitability & Margins (-1 to +1)** — How confident is management regarding margins, cost efficiency, and profitability trends? 
-        3. **Market & Demand Conditions (-1 to +1)** — How positive or negative is management’s view of market demand, competition, and external conditions? 
-        4. **Guidance Confidence (0 to 1)** — How clear, specific, and credible is management’s guidance or forward-looking statements? 
-        5. **Tone / Management Sentiment (-1 to +1)** — The overall emotional tone of management (positive, neutral, or negative). 
+        2. **Profitability (-1 to +1)** — How confident is management regarding margins, cost efficiency, and profitability trends? 
+        3. **Market Conditions (-1 to +1)** — How positive or negative is management’s view of market demand, competition, and external conditions? 
+        4. **Guidance (0 to 1)** — How clear, specific, and credible is management’s guidance or forward-looking statements? 
+        5. **Sentiment (-1 to +1)** — The overall emotional tone/sentiment of management (positive, neutral, or negative). 
             
-        Return a json table with following columns: [Stock Name, Stock Ticker, Stock ISIN, Growth Outlook, Profitability & Margins, Market & Demand Conditions, Guidance Confidence, Tone / Management Sentiment] 
+        Return a json table with following columns: [Stock Name, Stock Ticker, Stock ISIN, Growth Outlook, Profitability, Market Conditions, Guidance, Sentiment] 
         If no stocks are discussed, please return an empty json dict. 
         Please do not response with any kind of unstructured text. 
         ---
@@ -187,34 +172,6 @@ def get_llm_stock_rating(transcript: str, api_key: str, language: str = "DE"):
     )
 
     return response.text
-
-
-def _extract_json_payload(raw_text: str) -> Any:
-    """Best-effort conversion of a model response into JSON."""
-
-    cleaned = raw_text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned[3:]
-        if cleaned.startswith("json"):
-            cleaned = cleaned[4:]
-        end_idx = cleaned.rfind("```")
-        if end_idx != -1:
-            cleaned = cleaned[:end_idx]
-    cleaned = cleaned.strip()
-
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        # Fallback: try to locate the first JSON-like structure.
-        match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
-        if match:
-            return json.loads(match.group(1))
-        raise
-
-
-def save_to_json(json_path, video_dict):
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(video_dict, f, indent=4, ensure_ascii=False)
 
 
 def save_to_json(video_dict, json_path):
@@ -291,21 +248,6 @@ def clean_and_parse_json(llm_output: str, save_path: str = None):
 
     return data
 
-def create_df():
-    """
-
-        ### 🧮 Calculation Rules
-        1. Compute the **base_score** as the mean of the first three dimensions: base_score = (growth_outlook + profitability + market_conditions) / 3
-        2. Weight this base score by **guidance_confidence**, and then add the tone sentiment to capture communication style: weighted_score = (base_score * guidance_confidence + tone) / 2
-        3. Convert the result into a **0–100 Investment Recommendation Score**: investment_recommendation_score = round( (weighted_score + 1) / 2 * 100 , 1 )
-        4. Based on the score, assign the **Recommendation** category:
-            - 80–100 → **Buy**
-            - 60–79 → **Hold / Accumulate**
-            - 40–59 → **Neutral**
-            - 20–39 → **Reduce / Sell**
-            - 0–19 → **Strong Sell**
-
-    """
 
 #
 # text = get_transcript(json_path,"f5_YEimKDXI")

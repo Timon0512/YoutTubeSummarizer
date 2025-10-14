@@ -13,12 +13,13 @@ import xml.etree.ElementTree as ET
 import os
 import pandas as pd
 import requests
-from utils import get_yt_transcript, save_to_json, transcipt_path, get_llm_stock_rating, clean_and_parse_json, load_json_file
+from utils import get_yt_transcript, save_to_json, get_llm_stock_rating, clean_and_parse_json, load_json_file
 from dotenv import load_dotenv
 
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 rating_path = os.getenv("RATING_JSON_PATH", "rating.json")
+transcipt_path = os.getenv("TRANSCRIT_JSON_PATH", "transcripts.json")
 
 # Channels to watch. Extend this list with additional IDs as needed.
 CHANNELS: List[Dict[str, str]] = [
@@ -57,6 +58,20 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> List[Dict[str, str]]
     return videos
 
 def create_df_table_from_rating():
+    """
+
+        ### 🧮 Calculation Rules
+        1. Compute the **base_score** as the mean of the first three dimensions: base_score = (growth_outlook + profitability + market_conditions) / 3
+        2. Weight this base score by **guidance_confidence**, and then add the tone sentiment to capture communication style: weighted_score = (base_score * guidance_confidence + tone) / 2
+        3. Convert the result into a **0–100 Investment Recommendation Score**: investment_recommendation_score = round( (weighted_score + 1) / 2 * 100 , 1 )
+        4. Based on the score, assign the **Recommendation** category:
+            - 80–100 → **Buy**
+            - 60–79 → **Hold / Accumulate**
+            - 40–59 → **Neutral**
+            - 20–39 → **Reduce / Sell**
+            - 0–19 → **Strong Sell**
+
+    """
     data = load_json_file(rating_path)
     rows = []
     for video_id, entries in data.items():
@@ -65,7 +80,10 @@ def create_df_table_from_rating():
             rows.append(entry)
 
     df = pd.json_normalize(rows)
-    print(df)
+    df["base score"] = (df["Growth Outlook"] + df["Profitability"] + df["Market Conditions"]) / 3
+    df["weighted score"] = (df["base score"] * df["Guidance"] + df["Sentiment"]) / 2
+    df["investment_score"] = round( (df["weighted score"] + 1) / 2 * 100 , 1 )
+    df.to_csv("investment_score.csv", sep=";")
 
 
 def main():
