@@ -10,7 +10,33 @@ import shutil, datetime
 import pandas as pd
 
 
+def get_video_data(youtube, video_id: str) -> dict:
+    """Lädt Basisinformationen zu einem YouTube-Video über die API."""
+    response = youtube.videos().list(
+        part="snippet,contentDetails",
+        id=video_id
+    ).execute()
 
+    if not response.get("items"):
+        print(f"⚠️ Kein Video gefunden für ID {video_id}")
+        return {"id": video_id, "error": "Video not found"}
+
+    item = response["items"][0]
+    snippet = item.get("snippet", {})
+    details = item.get("contentDetails", {})
+
+    # Fallback: manche Videos haben kein videoPublishedAt
+    date = snippet.get("publishedAt")
+
+    data = {
+        "id": video_id,
+        "title": snippet.get("title", "Unknown Title"),
+        "date": date,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "description": snippet.get("description", ""),
+    }
+
+    return data
 
 def key_exists(keys: list, dictionary: dict):
     d = dictionary

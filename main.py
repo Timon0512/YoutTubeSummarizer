@@ -1,14 +1,17 @@
 import streamlit as st
-from utils import load_json_file, get_video_id, key_exists, save_to_json, get_yt_transcript, my_generator, save_stream_to_json, summarize_transcript_stream
+from utils import load_json_file, get_video_id, key_exists, save_to_json, get_yt_transcript, my_generator, save_stream_to_json, summarize_transcript_stream, get_video_data
 from dotenv import load_dotenv
 import os
 from google import genai
+from datetime import datetime
+from googleapiclient.discovery import build
 
 load_dotenv()
-summary_path = os.getenv("SUMMARY_JSON_PATH", "summary.json")
-transcript_path = os.getenv("TRANSCRIT_JSON_PATH", "transcripts.json")
+summary_path = os.path.join(os.path.dirname(__file__), "summary.json")
+transcript_path = os.path.join(os.path.dirname(__file__), "transcripts.json")
 
 API_KEY = os.getenv("API_KEY")
+GOOGLE_API = os.getenv("GOOGLE_API")
 transcript_dict = load_json_file(transcript_path)
 summary_dict = load_json_file(summary_path)
 
@@ -41,7 +44,13 @@ with st.spinner("Loading Transcript"):
         result = get_yt_transcript(video_id)
         if result["success"]:
             transcript = result["data"]
-            transcript_dict[video_id] = transcript
+            youtube = build("youtube", "v3", developerKey=GOOGLE_API)
+            video = get_video_data()
+            video_entry = {"name": "Website",
+                           **video,
+                           "processed_on": datetime.now(),
+                           "transcript": transcript}
+            transcript_dict[video_id] = video_entry
         else:
             st.error(result["error"])
             st.stop()
