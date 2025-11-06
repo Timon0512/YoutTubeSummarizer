@@ -45,7 +45,7 @@ with st.spinner("Loading Transcript"):
         if result["success"]:
             transcript = result["data"]
             youtube = build("youtube", "v3", developerKey=GOOGLE_API)
-            video = get_video_data()
+            video = get_video_data(youtube, video_id)
             video_entry = {"name": "Website",
                            **video,
                            "processed_on": datetime.now(),
