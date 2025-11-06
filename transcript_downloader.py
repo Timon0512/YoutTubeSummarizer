@@ -1,12 +1,3 @@
-"""Monitor a list of YouTube channels and analyse new uploads with Gemini.
-
-The previous command line interface has been replaced with a simpler module level
-configuration. Channels are specified via :data:`CHANNELS` and the module keeps
-track of processed videos by reading and updating ``video_dict.json`` – the same
-store that is used by the Streamlit front end. Whenever a new upload is detected
-its transcript is analysed with Gemini through :func:`utils.extract_stock_sentiments`.
-"""
-
 from __future__ import annotations
 from typing import Dict, List
 import xml.etree.ElementTree as ET
@@ -117,8 +108,6 @@ def process_videos(source_name, video_fetcher, source_id, transcript_path):
 
 
 def main():
-    # transcript_dict = load_json_file(transcipt_path)
-    # rating_dict = load_json_file(rating_path)
 
     for src in SOURCES:
         src_type = src["type"]
