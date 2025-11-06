@@ -3,7 +3,7 @@ from typing import Dict, List
 import xml.etree.ElementTree as ET
 import os
 import requests
-from utils import get_yt_transcript, save_to_json, get_llm_stock_rating, clean_and_parse_json, load_json_file
+from utils import get_yt_transcript, save_to_json, load_json_file
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from datetime import datetime
