@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from youtube_transcript_api import YouTubeTranscriptApi, _errors
 from google import genai
 import shutil, datetime
+import pandas as pd
 
 
 
@@ -248,6 +249,33 @@ def clean_and_parse_json(llm_output: str, save_path: str = None):
 
     return data
 
+def create_df_table_from_rating(json_data):
+    """
+
+        ### 🧮 Calculation Rules
+        1. Compute the **base_score** as the mean of the first three dimensions: base_score = (growth_outlook + profitability + market_conditions) / 3
+        2. Weight this base score by **guidance_confidence**, and then add the tone sentiment to capture communication style: weighted_score = (base_score * guidance_confidence + tone) / 2
+        3. Convert the result into a **0–100 Investment Recommendation Score**: investment_recommendation_score = round( (weighted_score + 1) / 2 * 100 , 1 )
+        4. Based on the score, assign the **Recommendation** category:
+            - 80–100 → **Buy**
+            - 60–79 → **Hold / Accumulate**
+            - 40–59 → **Neutral**
+            - 20–39 → **Reduce / Sell**
+            - 0–19 → **Strong Sell**
+
+    """
+    data = json_data
+    rows = []
+    for video_id, entries in data.items():
+        for entry in entries:
+            entry["video_id"] = video_id  # Video-ID als eigene Spalte
+            rows.append(entry)
+
+    df = pd.json_normalize(rows)
+    df["base score"] = (df["Growth Outlook"] + df["Profitability"] + df["Market Conditions"]) / 3
+    df["weighted score"] = (df["base score"] * df["Guidance"] + df["Sentiment"]) / 2
+    df["investment_score"] = round( (df["weighted score"] + 1) / 2 * 100 , 1 )
+    df.to_csv("investment_score.csv", sep=";")
 
 #
 # text = get_transcript(json_path,"f5_YEimKDXI")
