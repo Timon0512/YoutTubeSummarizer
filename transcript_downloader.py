@@ -11,8 +11,8 @@ from datetime import datetime
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 GOOGLE_API = os.getenv("GOOGLE_API")
-rating_path = os.getenv("RATING_JSON_PATH", "rating.json")
-transcipt_path = os.getenv("TRANSCRIT_JSON_PATH", "transcripts.json")
+rating_path = os.path.join(os.path.dirname(__file__), "rating.json")
+transcipt_path = os.path.join(os.path.dirname(__file__), "transcripts.json")
 
 SOURCES: list[dict[str, str]] = [
     #{"type": "channel", "id": "UCyCBf6asf89aQJaSXuAuTsg", "name": "Markus Koch"},
